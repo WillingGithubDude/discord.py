@@ -220,8 +220,6 @@ class Command(_BaseCommand, Generic[CogT, P, T]):
         The short help text for the command.
     usage: Optional[:class:`str`]
         A replacement for arguments in the default help text.
-    aliases: Union[List[:class:`str`], Tuple[:class:`str`]]
-        The list of aliases the command can be invoked under.
     enabled: :class:`bool`
         A boolean that indicates if the command is currently enabled.
         If the command is invoked while it is disabled, then
@@ -323,11 +321,6 @@ class Command(_BaseCommand, Generic[CogT, P, T]):
         self.brief: Optional[str] = kwargs.get('brief')
         self.usage: Optional[str] = kwargs.get('usage')
         self.rest_is_raw: bool = kwargs.get('rest_is_raw', False)
-        self.aliases: Union[List[str], Tuple[str]] = kwargs.get('aliases', [])
-        self.extras: Dict[str, Any] = kwargs.get('extras', {})
-
-        if not isinstance(self.aliases, (list, tuple)):
-            raise TypeError("Aliases of a command must be a list or a tuple of strings.")
 
         self.description: str = inspect.cleandoc(kwargs.get('description', ''))
         self.hidden: bool = kwargs.get('hidden', False)
@@ -1145,7 +1138,7 @@ class GroupMixin(Generic[CogT]):
 
     @property
     def commands(self) -> Set[Command[CogT, Any, Any]]:
-        """Set[:class:`.Command`]: A unique set of commands without aliases that are registered."""
+        """Set[:class:`.Command`]: A unique set of commands that are registered."""
         return set(self.all_commands.values())
 
     def recursively_remove_all_commands(self) -> None:
@@ -1171,7 +1164,7 @@ class GroupMixin(Generic[CogT]):
         Raises
         -------
         :exc:`.CommandRegistrationError`
-            If the command or its alias is already registered by different command.
+            If the command is already registered by different command.
         TypeError
             If the command passed is not a subclass of :class:`.Command`.
         """
@@ -1186,17 +1179,10 @@ class GroupMixin(Generic[CogT]):
             raise CommandRegistrationError(command.name)
 
         self.all_commands[command.name] = command
-        for alias in command.aliases:
-            if alias in self.all_commands:
-                self.remove_command(command.name)
-                raise CommandRegistrationError(alias, alias_conflict=True)
-            self.all_commands[alias] = command
 
     def remove_command(self, name: str) -> Optional[Command[CogT, Any, Any]]:
         """Remove a :class:`.Command` from the internal list
         of commands.
-
-        This could also be used as a way to remove aliases.
 
         Parameters
         -----------
@@ -1215,25 +1201,10 @@ class GroupMixin(Generic[CogT]):
         if command is None:
             return None
 
-        if name in command.aliases:
-            # we're removing an alias so we don't want to remove the rest
-            return command
-
-        # we're not removing the alias so let's delete the rest of them.
-        for alias in command.aliases:
-            cmd = self.all_commands.pop(alias, None)
-            # in the case of a CommandRegistrationError, an alias might conflict
-            # with an already existing command. If this is the case, we want to
-            # make sure the pre-existing command is not removed.
-            if cmd is not None and cmd != command:
-                self.all_commands[alias] = cmd
         return command
 
     def walk_commands(self) -> Generator[Command[CogT, Any, Any], None, None]:
         """An iterator that recursively walks through all commands and subcommands.
-
-        .. versionchanged:: 1.4
-            Duplicates due to aliases are no longer returned
 
         Yields
         ------
@@ -1248,8 +1219,6 @@ class GroupMixin(Generic[CogT]):
     def get_command(self, name: str) -> Optional[Command[CogT, Any, Any]]:
         """Get a :class:`.Command` from the internal list
         of commands.
-
-        This could also be used as a way to get aliases.
 
         The name could be fully qualified (e.g. ``'foo bar'``) will get
         the subcommand ``bar`` of the group command ``foo``. If a
